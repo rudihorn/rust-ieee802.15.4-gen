@@ -1,18 +1,16 @@
-#![recursion_limit = "128"]
-
-use generate::structure::SimpleStructure;
-use log::error;
-use proc_macro2::TokenStream;
-use crate::generate::structure::AlternativeOptions;
-use crate::generate::structure::Alternatives;
-
 use std::fs::File;
 use std::io::Write;
 use std::process;
 
+use log::error;
+use proc_macro2::TokenStream;
+
 use anyhow::{Context, Result};
 
-use crate::generate::structure::Structure;
+use prot2rust::generate::structure::{
+    AlternativeOptions, Alternatives, SimpleStructure, Structure,
+};
+use prot2rust::generate::{bitfield, structure};
 
 fn render_mac() -> Result<()> {
     let filename = "out/mac_frame.rs";
@@ -24,9 +22,9 @@ fn render_mac() -> Result<()> {
     let addr_short = SimpleStructure::new("addr_short", "address", 2);
     let addr_extended = SimpleStructure::new("addr_extended", "address", 8);
 
-    items.extend(generate::structure::render(&addr_none)?);
-    items.extend(generate::structure::render_simple(&addr_short)?);
-    items.extend(generate::structure::render_simple(&addr_extended)?);
+    items.extend(structure::render(&addr_none)?);
+    items.extend(structure::render_simple(&addr_short)?);
+    items.extend(structure::render_simple(&addr_extended)?);
 
     let address = AlternativeOptions::new("address", &addr_none)
         .insert_type(&addr_short)
@@ -35,13 +33,13 @@ fn render_mac() -> Result<()> {
     let pan_none = Structure::new("pan_none");
     let pan_short = SimpleStructure::new("pan_short", "pan", 2);
 
-    items.extend(generate::structure::render(&pan_none)?);
-    items.extend(generate::structure::render_simple(&pan_short)?);
+    items.extend(structure::render(&pan_none)?);
+    items.extend(structure::render_simple(&pan_short)?);
 
     let panid = AlternativeOptions::new("panid", &pan_none).insert_type(&pan_short);
 
     let alternatives = Alternatives::new().insert(&address).insert(&panid);
-    items.extend(generate::structure::render_alternatives(&alternatives)?);
+    items.extend(structure::render_alternatives(&alternatives)?);
 
     let structure = Structure::new("mhr")
         .add_bitfield("frame_control", "frame_control", 2)
@@ -51,7 +49,7 @@ fn render_mac() -> Result<()> {
         .add_alt_field("source_pan", &panid)
         .add_alt_field("source_address", &address);
 
-    items.extend(generate::structure::render_with_alts(&structure, &alternatives)?);
+    items.extend(structure::render_with_alts(&structure, &alternatives)?);
 
     let data = items.to_string().replace("] ", "]\n");
     file.write_all(data.as_ref())
@@ -64,7 +62,7 @@ fn render_fields() -> Result<()> {
     let filename = "out/frame_control.rs";
     let mut file = File::create(filename).expect("Could not create output file.");
 
-    let bitfield = generate::bitfield::BitField::new(
+    let bitfield = bitfield::BitField::new(
         "Frame_control",
         "This field contains information about the frame type, addressing and control flags.",
     )
@@ -138,8 +136,7 @@ fn render_fields() -> Result<()> {
         },
     );
 
-    let items =
-        generate::bitfield::render(&bitfield).with_context(|| "Error rendering structure")?;
+    let items = bitfield::render(&bitfield).with_context(|| "Error rendering structure")?;
 
     let data = items.to_string().replace("] ", "]\n");
     file.write_all(data.as_ref())

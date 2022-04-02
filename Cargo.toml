@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 prot2rust = { git = "https://github.com/rudihorn/prot2rust" }
+log = { version = "~0.4", features = ["std"] }
+proc-macro2 = "1.0"
+anyhow = "1.0"
