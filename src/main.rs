@@ -1,30 +1,27 @@
-use std::fs::File;
-use std::io::Write;
 use std::process;
 
 use log::error;
-use proc_macro2::TokenStream;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use prot2rust::generate::structure::{
     AlternativeOptions, Alternatives, SimpleStructure, Structure,
 };
-use prot2rust::generate::{bitfield, structure};
+use prot2rust::{
+    file::GenFile,
+    generate::{bitfield, structure},
+};
 
 fn render_mac() -> Result<()> {
-    let filename = "out/mac_frame.rs";
-    let mut file = File::create(filename).expect("Could not create output file.");
-
-    let mut items = TokenStream::new();
+    let mut genfile = GenFile::new();
 
     let addr_none = Structure::new("addr_none");
     let addr_short = SimpleStructure::new("addr_short", "address", 2);
     let addr_extended = SimpleStructure::new("addr_extended", "address", 8);
 
-    items.extend(structure::render(&addr_none)?);
-    items.extend(structure::render_simple(&addr_short)?);
-    items.extend(structure::render_simple(&addr_extended)?);
+    genfile.add_struct(&addr_none)?;
+    genfile.add_struct_simple(&addr_short)?;
+    genfile.add_struct_simple(&addr_extended)?;
 
     let address = AlternativeOptions::new("address", &addr_none)
         .insert_type(&addr_short)
@@ -33,13 +30,13 @@ fn render_mac() -> Result<()> {
     let pan_none = Structure::new("pan_none");
     let pan_short = SimpleStructure::new("pan_short", "pan", 2);
 
-    items.extend(structure::render(&pan_none)?);
-    items.extend(structure::render_simple(&pan_short)?);
+    genfile.add_struct(&pan_none)?;
+    genfile.add_struct_simple(&pan_short)?;
 
     let panid = AlternativeOptions::new("panid", &pan_none).insert_type(&pan_short);
 
     let alternatives = Alternatives::new().insert(&address).insert(&panid);
-    items.extend(structure::render_alternatives(&alternatives)?);
+    genfile.add_alternatives(&alternatives)?;
 
     let structure = Structure::new("mhr")
         .add_bitfield("frame_control", "frame_control", 2)
@@ -49,18 +46,13 @@ fn render_mac() -> Result<()> {
         .add_alt_field("source_pan", &panid)
         .add_alt_field("source_address", &address);
 
-    items.extend(structure::render_with_alts(&structure, &alternatives)?);
+    genfile.add_struct_with_alts(&structure, &alternatives)?;
 
-    let data = items.to_string().replace("] ", "]\n");
-    file.write_all(data.as_ref())
-        .expect("Could not write code to lib.rs");
-
-    Ok(())
+    genfile.write_file("out/mac_frame.rs")
 }
 
 fn render_frame_control() -> Result<()> {
-    let filename = "out/frame_control.rs";
-    let mut file = File::create(filename).expect("Could not create output file.");
+    let mut genfile = GenFile::new();
 
     let bitfield = bitfield::BitField::new(
         "Frame_control",
@@ -112,8 +104,8 @@ fn render_frame_control() -> Result<()> {
         "Specifies whether the MAC frame is to be sent within the same PAN.",
         1,
         |v| {
-            v.add_enum_value("Compressed", 0)
-                .add_enum_value("Uncompressed", 1)
+            v.add_enum_value("Uncompressed", 0)
+                .add_enum_value("Compressed", 1)
         },
     )
     .add_reserved(1)
@@ -138,8 +130,8 @@ fn render_frame_control() -> Result<()> {
         2,
         |v| {
             v.add_enum_value("Not_present", 0)
-                .add_enum_value("Address_16bit", 1)
-                .add_enum_value("Address_64bit_extended", 3)
+                .add_enum_value("Address_16bit", 0b10)
+                .add_enum_value("Address_64bit_extended", 0b11)
         },
     )
     .add_bit_field(
@@ -158,23 +150,18 @@ fn render_frame_control() -> Result<()> {
         2,
         |v| {
             v.add_enum_value("Not_present", 0)
-                .add_enum_value("Address_16bit", 1)
-                .add_enum_value("Address_64bit_extended", 3)
+                .add_enum_value("Address_16bit", 0b10)
+                .add_enum_value("Address_64bit_extended", 0b11)
         },
     );
 
-    let items = bitfield::render(&bitfield).with_context(|| "Error rendering structure")?;
+    genfile.add_bitfield(&bitfield)?;
 
-    let data = items.to_string().replace("] ", "]\n");
-    file.write_all(data.as_ref())
-        .expect("Could not write code to lib.rs");
-
-    Ok(())
+    genfile.write_file("out/frame_control.rs")
 }
 
 fn render_security_control() -> Result<()> {
-    let filename = "out/security_control.rs";
-    let mut file = File::create(filename).expect("Could not create output file.");
+    let mut genfile = GenFile::new();
 
     let bitfield = bitfield::BitField::new(
         "Security_control",
@@ -218,44 +205,36 @@ fn render_security_control() -> Result<()> {
             .add_enum_value_desc("asn_nonce", "The ASN is used to generate the Nonce.", 1))
     .add_reserved(1);
 
-    let items = bitfield::render(&bitfield).with_context(|| "Error rendering structure")?;
+    genfile.add_bitfield(&bitfield)?;
 
-    let data = items.to_string().replace("] ", "]\n");
-    file.write_all(data.as_ref())
-        .expect("Could not write code to lib.rs");
-
-    Ok(())
+    genfile.write_file("out/security_control.rs")
 }
 
 fn render_auxiliary_security_header() -> Result<()> {
-    let filename = "out/auxiliary_security_header.rs";
-    let mut file = File::create(filename).expect("Could not create output file.");
-
-    let mut items = TokenStream::new();
+    let mut genfile = GenFile::new();
 
     let frame_counter_none = Structure::new("frame_counter_none");
-    let frame_counter_present =
-        Structure::new("frame_counter_present").add_u32_field("frame_counter");
+    let frame_counter_present = SimpleStructure::new("frame_counter_present", "frame_counter", 4);
 
-    items.extend(structure::render(&frame_counter_none)?);
-    items.extend(structure::render(&frame_counter_present)?);
+    genfile.add_struct(&frame_counter_none)?;
+    genfile.add_struct_simple(&frame_counter_present)?;
 
-    let frame_counter = AlternativeOptions::new("frame_counter", &frame_counter_none)
-        .insert_type(&frame_counter_none);
+    let frame_counter = AlternativeOptions::new("frame_counter_type", &frame_counter_none)
+        .insert_type(&frame_counter_present);
 
     let key_id_none = Structure::new("key_id_none");
-    let key_id_only = Structure::new("key_id_only").add_u8_field("key_id");
+    let key_id_only = SimpleStructure::new("key_id_only", "key_id", 1);
     let key_id_short = Structure::new("key_id_short")
-        .add_u32_field("key_source")
-        .add_u8_field("key_id");
+        .add_u32_field("key_source_1")
+        .add_u8_field("key_id_1");
     let key_id_long = Structure::new("key_id_long")
-        .add_u64_field("key_source")
-        .add_u8_field("key_id");
+        .add_u64_field("key_source_2")
+        .add_u8_field("key_id_2");
 
-    items.extend(structure::render(&key_id_none)?);
-    items.extend(structure::render(&key_id_only)?);
-    items.extend(structure::render(&key_id_short)?);
-    items.extend(structure::render(&key_id_long)?);
+    genfile.add_struct(&key_id_none)?;
+    genfile.add_struct_simple(&key_id_only)?;
+    genfile.add_struct(&key_id_short)?;
+    genfile.add_struct(&key_id_long)?;
 
     let key_id = AlternativeOptions::new("key_id", &key_id_none)
         .insert_type(&key_id_only)
@@ -263,24 +242,19 @@ fn render_auxiliary_security_header() -> Result<()> {
         .insert_type(&key_id_long);
 
     let alternatives = Alternatives::new().insert(&frame_counter).insert(&key_id);
-    items.extend(structure::render_alternatives(&alternatives)?);
+    genfile.add_alternatives(&alternatives)?;
 
-    let structure = structure::Structure::new("Security_control")
+    let structure = structure::Structure::new("Auxiliary_security_header")
         .add_bitfield("security_control", "security_control", 1)
         .add_alt_field("frame_counter", &frame_counter);
 
-    items.extend(structure::render_with_alts(&structure, &alternatives)?);
+    genfile.add_struct_with_alts(&structure, &alternatives)?;
 
-    let data = items.to_string().replace("] ", "]\n");
-    file.write_all(data.as_ref())
-        .expect("Could not write code to lib.rs");
-
-    Ok(())
+    genfile.write_file("out/auxiliary_security_header.rs")
 }
 
 pub fn render_ie_control() -> Result<()> {
-    let filename = "out/ie_control.rs";
-    let mut file = File::create(filename).expect("Could not create output file.");
+    let mut genfile = GenFile::new();
 
     let bitfield = bitfield::BitField::new("IE Control", "Specifies the type of an IE header.")
         .add_bit_field(
@@ -327,13 +301,9 @@ pub fn render_ie_control() -> Result<()> {
             v.add_enum_value("default", 0)
         });
 
-    let items = bitfield::render(&bitfield).with_context(|| "Error rendering structure")?;
+    genfile.add_bitfield(&bitfield)?;
 
-    let data = items.to_string().replace("] ", "]\n");
-    file.write_all(data.as_ref())
-        .expect("Could not write code to lib.rs");
-
-    Ok(())
+    genfile.write_file("out/ie_control.rs")
 }
 
 pub fn run() -> Result<()> {
