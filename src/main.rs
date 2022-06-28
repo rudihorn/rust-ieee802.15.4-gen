@@ -12,6 +12,8 @@ use prot2rust::{
     generate::{bitfield, structure},
 };
 
+mod render_beacon;
+
 fn render_mac() -> Result<()> {
     let mut genfile = GenFile::new();
 
@@ -312,6 +314,8 @@ pub fn run() -> Result<()> {
     render_ie_control()?;
     render_security_control()?;
     render_auxiliary_security_header()?;
+
+    render_beacon::render()?;
 
     Ok(())
 }
