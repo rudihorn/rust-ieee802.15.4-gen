@@ -17,6 +17,8 @@ mod render_beacon;
 fn render_mac() -> Result<()> {
     let mut genfile = GenFile::new();
 
+    genfile.add_struct_imports()?;
+
     let addr_none = Structure::new("addr_none");
     let addr_short = SimpleStructure::new("addr_short", "address", 2);
     let addr_extended = SimpleStructure::new("addr_extended", "address", 8);
@@ -214,6 +216,9 @@ fn render_security_control() -> Result<()> {
 
 fn render_auxiliary_security_header() -> Result<()> {
     let mut genfile = GenFile::new();
+
+    genfile.add_struct_imports()?;
+
 
     let frame_counter_none = Structure::new("frame_counter_none");
     let frame_counter_present = SimpleStructure::new("frame_counter_present", "frame_counter", 4);

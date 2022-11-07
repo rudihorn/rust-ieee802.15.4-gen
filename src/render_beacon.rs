@@ -120,6 +120,8 @@ pub fn render_gts_descriptor_config() -> Result<()> {
 pub fn render_gts_descriptor() -> Result<()> {
     let mut genfile = GenFile::new();
 
+    genfile.add_struct_imports()?;
+
     let structure = Structure::new("gts_descriptor")
         .add_u16_field("short_address")
         .add_bitfield("config", "gts_descriptor_config", 1);
